@@ -41,7 +41,7 @@ ROOM_RECTS = {
     "Production 2":  (780, 360, 1230, 650),
 }
 
-# Evac graph (optional visual)
+# (Optional visual scaffolding)
 NODES = {"ENTRY": (80, 740), "C1": (560, 320), "C2": (900, 320), "EXIT_W": (40, 420), "EXIT_E": (1360, 420)}
 EDGES = [("ENTRY","C1"),("C1","C2"),("C2","EXIT_E"),("C1","EXIT_W")]
 
@@ -149,7 +149,7 @@ def get_series(key: str) -> pd.DataFrame:
     ts, vs = zip(*buf)
     return pd.DataFrame({"ts": ts, "value": vs})
 
-# simulator thread (optional if no Modbus)
+# ----------- SIMULATOR -----------
 class Simulator(threading.Thread):
     def __init__(self, interval=1.0):
         super().__init__(daemon=True)
@@ -271,12 +271,37 @@ if view == "facility":
         fig.update_layout(height=600, margin=dict(l=0, r=0, t=0, b=0))
 
         clicked = plotly_events(
-            fig, click_event=True, hover_event=False, select_event=False,
-            override_height=600, override_width=None, key="fac_click"
+            fig,
+            click_event=True,
+            hover_event=False,
+            select_event=False,
+            override_height=600,
+            override_width=None,
+            key="fac_click",
         )
-        if clicked:
-            rn = clicked[0]["customdata"]
-            set_view("room", rn)
+
+        # Robust click handling: use customdata when present; else map by coordinates
+        selected_room = None
+        if isinstance(clicked, list) and len(clicked) > 0:
+            evt = clicked[0] or {}
+            rn = evt.get("customdata")
+            if rn:
+                selected_room = rn
+            else:
+                x = evt.get("x")
+                y = evt.get("y")
+                try:
+                    if x is not None and y is not None:
+                        px, py = float(x), float(y)
+                        for name, (x0, y0, x1, y1) in ROOM_RECTS.items():
+                            if x0 <= px <= x1 and y0 <= py <= y1:
+                                selected_room = name
+                                break
+                except Exception:
+                    pass
+
+        if selected_room:
+            set_view("room", selected_room)
             st.experimental_rerun()
 
         st.caption("Click a room to open details. Status rollup = worst detector in the room.")
@@ -381,3 +406,4 @@ if view == "room" and room:
         st.info("Tip: use **Simulate Spike** to demo alarms changing the AI guidance.")
 
     st.autorefresh(interval=refresh * 1000, key=f"room_refresh_{room}")
+
